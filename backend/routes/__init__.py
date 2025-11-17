@@ -7,7 +7,7 @@ responses_bp = Blueprint('responses', __name__, url_prefix='/api/responses')
 
 def register_routes(app):
     """Enregistrer tous les blueprints"""
-    from . import auth, facebook, responses
+    from routes import auth, facebook, responses
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(facebook_bp)

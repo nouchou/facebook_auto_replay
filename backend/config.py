@@ -8,8 +8,12 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
     DEBUG = os.getenv('FLASK_ENV') == 'development'
     
-    # Database
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///database.db')
+    # Database - CORRIGÉ pour PostgreSQL sur Render
+    database_url = os.getenv('DATABASE_URL', 'sqlite:///database.db')
+    # Render utilise postgres:// mais SQLAlchemy nécessite postgresql://
+    if database_url and database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    SQLALCHEMY_DATABASE_URI = database_url
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Facebook
@@ -19,5 +23,9 @@ class Config:
     FACEBOOK_VERIFY_TOKEN = os.getenv('FACEBOOK_VERIFY_TOKEN', 'my_verify_token_123')
     FACEBOOK_GRAPH_VERSION = 'v18.0'
     
-    # CORS
-    CORS_ORIGINS = ['http://localhost:3000', 'http://localhost:5173']
+    # CORS - Ajoutez votre domaine Render
+    CORS_ORIGINS = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'https://votre-frontend.onrender.com'  # À remplacer
+    ]

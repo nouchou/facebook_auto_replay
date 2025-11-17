@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: facebook-autoresponse
+    name: facebook-auto-responder
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn wsgi:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -11,3 +11,20 @@ services:
         generateValue: true
       - key: FLASK_ENV
         value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: facebook-db
+          property: connectionString
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: FACEBOOK_PAGE_ACCESS_TOKEN
+        sync: false
+      - key: FACEBOOK_VERIFY_TOKEN
+        value: my_verify_token_123
+
+databases:
+  - name: facebook-db
+    databaseName: facebook_responder
+    user: facebook_user
