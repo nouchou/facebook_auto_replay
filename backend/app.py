@@ -14,7 +14,7 @@ def create_app():
     CORS(app, resources={
         r"/api/*": {
             "origins": Config.CORS_ORIGINS,
-            "methods": ["GET", "POST", "PUT", "DELETE"],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization"]
         }
     })
@@ -26,7 +26,7 @@ def create_app():
     with app.app_context():
         db.create_all()
     
-    # Enregistrer les blueprints - VERSION CORRIGÉE
+    # Enregistrer les blueprints
     try:
         from routes import register_routes
         register_routes(app)
@@ -37,9 +37,9 @@ def create_app():
         from routes.facebook import facebook_bp
         from routes.responses import responses_bp
         
-        app.register_blueprint(auth_bp)
-        app.register_blueprint(facebook_bp)
-        app.register_blueprint(responses_bp)
+        app.register_blueprint(auth_bp, url_prefix='/api/auth')
+        app.register_blueprint(facebook_bp, url_prefix='/api/facebook')
+        app.register_blueprint(responses_bp, url_prefix='/api/responses')
     
     # Webhook Facebook
     @app.route('/webhook', methods=['GET'])
@@ -189,19 +189,20 @@ def create_app():
     def health():
         return jsonify({'status': 'healthy', 'message': 'API is running'}), 200
     
+    # CORRECTIF CORS - Ajouté AVANT return app
+    @app.after_request
+    def after_request(response):
+        origin = request.headers.get('Origin')
+        if origin in Config.CORS_ORIGINS:
+            response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
     return app
 
 if __name__ == '__main__':
     app = create_app()
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)
-    
-@app.after_request
-def after_request(response):
-    origin = request.headers.get('Origin')
-    if origin in Config.CORS_ORIGINS:
-        response.headers.add('Access-Control-Allow-Origin', origin)
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
