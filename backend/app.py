@@ -195,3 +195,13 @@ if __name__ == '__main__':
     app = create_app()
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)
+    
+@app.after_request
+def after_request(response):
+    origin = request.headers.get('Origin')
+    if origin in Config.CORS_ORIGINS:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
