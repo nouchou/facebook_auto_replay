@@ -7,11 +7,9 @@ from config import Config
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    """Connexion utilisateur (pour une future authentification)"""
+    """Connexion utilisateur"""
     data = request.get_json()
     
-    # Pour l'instant, authentification basique
-    # À améliorer avec bcrypt et base de données utilisateurs
     username = data.get('username')
     password = data.get('password')
     
