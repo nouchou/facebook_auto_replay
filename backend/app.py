@@ -1,8 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from models import db, FacebookPage, Message, Comment
 from services.facebook_service import FacebookService
 from services.response_service import ResponseService
+
 from config import Config
 import os
 
@@ -75,6 +76,9 @@ def create_app():
                         handle_comment(change.get('value', {}))
         
         return 'OK', 200
+    @app.route('/privacy-policy', methods=['GET'])
+    def privacy_policy():
+        return render_template('privacy-policy.html')
     
     def handle_message(messaging_event):
         """Traiter un message reçu"""
