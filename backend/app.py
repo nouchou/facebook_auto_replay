@@ -10,14 +10,12 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     
-    # Initialiser CORS
-    CORS(app, resources={
-        r"/api/*": {
-            "origins": Config.CORS_ORIGINS,
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"]
-        }
-    })
+    # Configuration CORS simplifiée et permissive
+    CORS(app, 
+         resources={r"/api/*": {"origins": "*"}},
+         supports_credentials=True,
+         allow_headers=["Content-Type", "Authorization"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
     
     # Initialiser la base de données
     db.init_app(app)
@@ -188,17 +186,6 @@ def create_app():
     @app.route('/health', methods=['GET'])
     def health():
         return jsonify({'status': 'healthy', 'message': 'API is running'}), 200
-    
-    # CORRECTIF CORS - Ajouté AVANT return app
-    @app.after_request
-    def after_request(response):
-        origin = request.headers.get('Origin')
-        if origin in Config.CORS_ORIGINS:
-            response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
     
     return app
 

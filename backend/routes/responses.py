@@ -2,9 +2,13 @@ from flask import request, jsonify
 from routes import responses_bp
 from models import db, AutoResponse, Message, Comment
 
-@responses_bp.route('/', methods=['GET'])
+@responses_bp.route('', methods=['GET', 'OPTIONS'])
+@responses_bp.route('/', methods=['GET', 'OPTIONS'])
 def get_responses():
     """Récupérer toutes les réponses"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
     responses = AutoResponse.query.order_by(AutoResponse.priority.desc()).all()
     return jsonify([{
         'id': r.id,
@@ -16,6 +20,7 @@ def get_responses():
         'created_at': r.created_at.isoformat()
     } for r in responses])
 
+@responses_bp.route('', methods=['POST'])
 @responses_bp.route('/', methods=['POST'])
 def create_response():
     """Créer une nouvelle réponse"""

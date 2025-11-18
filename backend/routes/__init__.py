@@ -1,6 +1,6 @@
 from flask import Blueprint
 
-# Créer les blueprints SANS préfixe /api (il sera ajouté dans app.py)
+# Créer les blueprints SANS préfixe
 auth_bp = Blueprint('auth', __name__)
 facebook_bp = Blueprint('facebook', __name__)
 responses_bp = Blueprint('responses', __name__)
@@ -14,4 +14,7 @@ def register_routes(app):
     app.register_blueprint(facebook_bp, url_prefix='/api/facebook')
     app.register_blueprint(responses_bp, url_prefix='/api/responses')
     
-    print("✓ Routes enregistrées avec succès")
+    print("✅ Routes enregistrées:")
+    print("   - /api/auth/*")
+    print("   - /api/facebook/*")
+    print("   - /api/responses/*")
