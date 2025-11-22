@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bot, Home, Settings as SettingsIcon, LogOut, User, ChevronDown } from 'lucide-react';
+import { Bot, Home, Settings as SettingsIcon, LogOut, User, ChevronDown, Brain } from 'lucide-react';
 
 export default function Navbar({ user, onLogout }) {
   const location = useLocation();
@@ -43,6 +43,19 @@ export default function Navbar({ user, onLogout }) {
               >
                 <Home className="w-4 h-4 mr-2" />
                 Dashboard
+              </Link>
+
+              {/* 🆕 NOUVEAU : Lien Analyse NLP */}
+              <Link
+                to="/nlp"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
+                  isActive('/nlp')
+                    ? 'border-blue-600 text-gray-900'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                <Brain className="w-4 h-4 mr-2" />
+                Analyse NLP
               </Link>
 
               <Link
@@ -107,18 +120,6 @@ export default function Navbar({ user, onLogout }) {
                 </>
               )}
             </div>
-
-            {/* OU Bouton de déconnexion direct (alternative) */}
-            {/* Décommentez cette section si vous préférez un bouton direct */}
-            {/*
-            <button
-              onClick={handleLogout}
-              className="flex items-center space-x-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors border border-red-200"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="text-sm font-medium">Déconnexion</span>
-            </button>
-            */}
           </div>
 
           {/* Mobile - Right side */}
@@ -151,6 +152,21 @@ export default function Navbar({ user, onLogout }) {
             <div className="flex items-center">
               <Home className="w-5 h-5 mr-3" />
               Dashboard
+            </div>
+          </Link>
+
+          {/* 🆕 NOUVEAU : Lien mobile Analyse NLP */}
+          <Link
+            to="/nlp"
+            className={`block pl-3 pr-4 py-3 border-l-4 text-base font-medium ${
+              isActive('/nlp')
+                ? 'bg-blue-50 border-blue-600 text-blue-700'
+                : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+            }`}
+          >
+            <div className="flex items-center">
+              <Brain className="w-5 h-5 mr-3" />
+              Analyse NLP
             </div>
           </Link>
           

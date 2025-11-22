@@ -5,6 +5,7 @@ import PageConnection from './pages/PageConnection';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Navbar from './components/Navbar';
+import NLPDashboard from './components/NLPDashboard'; // 🆕 NOUVEAU
 import { api } from './services/api';
 
 function App() {
@@ -124,6 +125,20 @@ function App() {
                 <Navigate to="/connect" replace />
               ) : (
                 <Dashboard />
+              )
+            } 
+          />
+
+          {/* 🆕 NOUVEAU : Route Analyse NLP */}
+          <Route 
+            path="/nlp" 
+            element={
+              !isAuthenticated ? (
+                <Navigate to="/login" replace />
+              ) : !isConnected ? (
+                <Navigate to="/connect" replace />
+              ) : (
+                <NLPDashboard />
               )
             } 
           />
