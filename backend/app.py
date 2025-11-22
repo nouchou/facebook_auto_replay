@@ -40,6 +40,15 @@ def create_app():
         app.register_blueprint(facebook_bp, url_prefix='/api/facebook')
         app.register_blueprint(responses_bp, url_prefix='/api/responses')
     
+    # 🆕 NOUVEAU : Enregistrer le blueprint NLP
+    try:
+        from routes.nlp import nlp_bp
+        app.register_blueprint(nlp_bp, url_prefix='/api/nlp')
+        print('✅ Blueprint NLP enregistré avec succès')
+    except ImportError as e:
+        print(f'⚠️ Impossible d\'importer le blueprint NLP: {e}')
+        print('   Le système fonctionnera sans les fonctionnalités NLP avancées')
+    
     # Webhook Facebook
     @app.route('/webhook', methods=['GET'])
     def verify_webhook():
@@ -76,6 +85,7 @@ def create_app():
                         handle_comment(change.get('value', {}))
         
         return 'OK', 200
+    
     @app.route('/privacy-policy', methods=['GET'])
     def privacy_policy():
         return render_template('privacy-policy.html')
@@ -110,7 +120,7 @@ def create_app():
             except:
                 sender_name = 'Utilisateur'
             
-            # Trouver une réponse appropriée
+            # 🆕 AMÉLIORÉ : Trouver une réponse appropriée avec NLP
             response_text = ResponseService.find_matching_response(message_text, 'message')
             if not response_text:
                 response_text = ResponseService.get_default_response()
@@ -132,6 +142,7 @@ def create_app():
             db.session.commit()
             
             print(f'Message traité de {sender_name}: {message_text[:50]}...')
+            print(f'Réponse envoyée: {response_text[:50]}...')
         
         except Exception as e:
             print(f'Erreur lors du traitement du message: {str(e)}')
@@ -159,7 +170,7 @@ def create_app():
             
             fb_service = FacebookService(page.access_token)
             
-            # Trouver une réponse appropriée
+            # 🆕 AMÉLIORÉ : Trouver une réponse appropriée avec NLP
             response_text = ResponseService.find_matching_response(comment_text, 'comment')
             
             if response_text:
@@ -181,6 +192,7 @@ def create_app():
                 db.session.commit()
                 
                 print(f'Commentaire traité de {user_name}: {comment_text[:50]}...')
+                print(f'Réponse envoyée: {response_text[:50]}...')
         
         except Exception as e:
             print(f'Erreur lors du traitement du commentaire: {str(e)}')
@@ -196,4 +208,11 @@ def create_app():
 if __name__ == '__main__':
     app = create_app()
     port = int(os.getenv('PORT', 5000))
+    print('='*60)
+    print('🚀 Démarrage de l\'application Facebook Auto-Reply')
+    print('='*60)
+    print(f'📍 Port: {port}')
+    print(f'🔧 Mode: {Config.DEBUG and "Development" or "Production"}')
+    print(f'💾 Database: {Config.SQLALCHEMY_DATABASE_URI.split("://")[0]}')
+    print('='*60)
     app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)
