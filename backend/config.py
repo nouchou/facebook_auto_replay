@@ -17,19 +17,13 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Facebook
-<<<<<<< HEAD
     FACEBOOK_APP_ID = os.getenv('FACEBOOK_APP_ID')
     FACEBOOK_APP_SECRET = os.getenv('FACEBOOK_APP_SECRET')
     FACEBOOK_PAGE_ACCESS_TOKEN = os.getenv('FACEBOOK_PAGE_ACCESS_TOKEN')
     FACEBOOK_VERIFY_TOKEN = os.getenv('FACEBOOK_VERIFY_TOKEN', 'my_verify_token_123')
     FACEBOOK_GRAPH_VERSION = 'v18.0'
-=======
-    FACEBOOK_APP_ID = os.getenv('2404163833372728')
-    FACEBOOK_APP_SECRET = os.getenv('ce10504723897f50831d9eb1cc6c2199')
-    FACEBOOK_PAGE_ACCESS_TOKEN = os.getenv('EAAiKkwNFIDgBPwhjq5fZAAD8dZBkhbn02EqXXo7cSbVmW8NeQD2MzBLYHFwqpCGnTaFJ0mKI1bLZB0b0DOboS0YDBiD6kd5zoCvo2iQyPU9YsIqGcAaUJic4YDpufdVFcGdOo3ZC77Jr28MtU6z7Ic6TE7uivXXZA4Vj23clfV8VBt2bPNsLkokrrhDCYez6soZAZAYyneBDgZDZD')
-    FACEBOOK_VERIFY_TOKEN = os.getenv('my_verify_token_123', 'my_verify_token_123')
-    FACEBOOK_GRAPH_VERSION = 'v19.0'
->>>>>>> 47e4f9716a18b7da166bce5008d0572322af1a84
+
+
     
     # CORS - Ajoutez votre domaine Render
     CORS_ORIGINS = [
