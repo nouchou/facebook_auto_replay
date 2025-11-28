@@ -1,6 +1,5 @@
 """
 Service de réponses automatiques avec NLP - VERSION INTÉGRÉE
-Remplace le fichier services/response_service.py existant
 """
 
 import re

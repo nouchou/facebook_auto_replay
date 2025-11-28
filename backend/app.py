@@ -58,16 +58,18 @@ def create_app():
         challenge = request.args.get('hub.challenge')
         
         if mode == 'subscribe' and token == Config.FACEBOOK_VERIFY_TOKEN:
-            print('Webhook vérifié avec succès!')
+            print('✅ Webhook vérifié avec succès!')
             return challenge, 200
         
-        print('Échec de la vérification du webhook')
+        print('❌ Échec de la vérification du webhook')
         return 'Forbidden', 403
     
     @app.route('/webhook', methods=['POST'])
     def webhook():
         """Recevoir les notifications de Facebook"""
         data = request.get_json()
+        
+        print(f"📨 Webhook reçu: {data}")
         
         if not data or data.get('object') != 'page':
             return 'OK', 200
@@ -100,16 +102,20 @@ def create_app():
             sender_id = messaging_event.get('sender', {}).get('id')
             message = messaging_event.get('message', {})
             message_text = message.get('text', '')
-            message_id = message.get('id')
+            message_id = message.get('mid')
             
             if not message_text or not sender_id:
                 return
             
+            print(f"📩 Message reçu de {sender_id}: {message_text[:50]}...")
+            
             # Récupérer la page active
             page = FacebookPage.query.filter_by(is_active=True).first()
             if not page:
-                print('Aucune page active trouvée')
+                print('❌ Aucune page active trouvée')
                 return
+            
+            print(f"✅ Page active: {page.page_name}")
             
             fb_service = FacebookService(page.access_token)
             
@@ -125,8 +131,14 @@ def create_app():
             if not response_text:
                 response_text = ResponseService.get_default_response()
             
+            print(f"💬 Réponse: {response_text[:50]}...")
+            
             # Envoyer la réponse
-            fb_service.send_message(sender_id, response_text)
+            result = fb_service.send_message(sender_id, response_text)
+            
+            if 'error' in result:
+                print(f"❌ Erreur envoi: {result['error']}")
+                return
             
             # Enregistrer dans la base de données
             new_message = Message(
@@ -141,17 +153,26 @@ def create_app():
             db.session.add(new_message)
             db.session.commit()
             
-            print(f'Message traité de {sender_name}: {message_text[:50]}...')
-            print(f'Réponse envoyée: {response_text[:50]}...')
+            print(f'✅ Message traité de {sender_name}')
         
         except Exception as e:
-            print(f'Erreur lors du traitement du message: {str(e)}')
+            print(f'❌ Erreur traitement message: {str(e)}')
+            import traceback
+            traceback.print_exc()
             db.session.rollback()
     
     def handle_comment(comment_data):
-        """Traiter un commentaire reçu"""
+        """Traiter un commentaire reçu - VERSION CORRIGÉE"""
         try:
+            # VÉRIFICATION : uniquement les NOUVEAUX commentaires
             if comment_data.get('item') != 'comment':
+                print(f"❌ Item non-commentaire ignoré: {comment_data.get('item')}")
+                return
+            
+            # VÉRIFICATION : uniquement les commentaires AJOUTÉS (pas édités/supprimés)
+            verb = comment_data.get('verb')
+            if verb not in ['add', 'edited']:
+                print(f"❌ Verbe ignoré: {verb}")
                 return
             
             comment_id = comment_data.get('comment_id')
@@ -160,13 +181,19 @@ def create_app():
             user_name = comment_data.get('from', {}).get('name', 'Utilisateur')
             comment_text = comment_data.get('message', '')
             
-            if not comment_text:
+            print(f"📝 Commentaire reçu de {user_name}: {comment_text[:50]}...")
+            
+            if not comment_text or not comment_id:
+                print("❌ Commentaire vide ou sans ID")
                 return
             
             # Récupérer la page active
             page = FacebookPage.query.filter_by(is_active=True).first()
             if not page:
+                print('❌ Aucune page active trouvée')
                 return
+            
+            print(f"✅ Page active: {page.page_name}")
             
             fb_service = FacebookService(page.access_token)
             
@@ -174,8 +201,16 @@ def create_app():
             response_text = ResponseService.find_matching_response(comment_text, 'comment')
             
             if response_text:
+                print(f"💬 Réponse trouvée: {response_text[:50]}...")
+                
                 # Répondre au commentaire
-                fb_service.reply_to_comment(comment_id, response_text)
+                result = fb_service.reply_to_comment(comment_id, response_text)
+                print(f"📤 Résultat: {result}")
+                
+                # Vérifier si erreur
+                if 'error' in result:
+                    print(f"❌ ERREUR API: {result['error']}")
+                    return
                 
                 # Enregistrer dans la base de données
                 new_comment = Comment(
@@ -191,11 +226,14 @@ def create_app():
                 db.session.add(new_comment)
                 db.session.commit()
                 
-                print(f'Commentaire traité de {user_name}: {comment_text[:50]}...')
-                print(f'Réponse envoyée: {response_text[:50]}...')
+                print(f'✅ Commentaire traité de {user_name}')
+            else:
+                print(f"⚠️ Aucune réponse trouvée pour: {comment_text[:30]}...")
         
         except Exception as e:
-            print(f'Erreur lors du traitement du commentaire: {str(e)}')
+            print(f'❌ Erreur traitement commentaire: {str(e)}')
+            import traceback
+            traceback.print_exc()
             db.session.rollback()
     
     # Route de santé
@@ -211,7 +249,7 @@ if __name__ == '__main__':
     print('='*60)
     print('🚀 Démarrage de l\'application Facebook Auto-Reply')
     print('='*60)
-    print(f'📍 Port: {port}')
+    print(f'🔌 Port: {port}')
     print(f'🔧 Mode: {Config.DEBUG and "Development" or "Production"}')
     print(f'💾 Database: {Config.SQLALCHEMY_DATABASE_URI.split("://")[0]}')
     print('='*60)
