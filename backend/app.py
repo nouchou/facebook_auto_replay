@@ -3,15 +3,15 @@ from flask_cors import CORS
 from models import db, FacebookPage, Message, Comment
 from services.facebook_service import FacebookService
 from services.response_service import ResponseService
-
 from config import Config
 import os
+import requests
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     
-    # Configuration CORS simplifiée et permissive
+    # Configuration CORS
     CORS(app, 
          resources={r"/api/*": {"origins": "*"}},
          supports_credentials=True,
@@ -31,7 +31,6 @@ def create_app():
         register_routes(app)
     except ImportError as e:
         print(f"Erreur d'import des routes: {e}")
-        # Import direct en cas d'échec
         from routes.auth import auth_bp
         from routes.facebook import facebook_bp
         from routes.responses import responses_bp
@@ -40,22 +39,24 @@ def create_app():
         app.register_blueprint(facebook_bp, url_prefix='/api/facebook')
         app.register_blueprint(responses_bp, url_prefix='/api/responses')
     
-    # 🆕 NOUVEAU : Enregistrer le blueprint NLP
+    # Enregistrer le blueprint NLP
     try:
         from routes.nlp import nlp_bp
         app.register_blueprint(nlp_bp, url_prefix='/api/nlp')
         print('✅ Blueprint NLP enregistré avec succès')
     except ImportError as e:
         print(f'⚠️ Impossible d\'importer le blueprint NLP: {e}')
-        print('   Le système fonctionnera sans les fonctionnalités NLP avancées')
     
-    # Webhook Facebook
+    # ==================== WEBHOOKS FACEBOOK ====================
+    
     @app.route('/webhook', methods=['GET'])
     def verify_webhook():
         """Vérification du webhook Facebook"""
         mode = request.args.get('hub.mode')
         token = request.args.get('hub.verify_token')
         challenge = request.args.get('hub.challenge')
+        
+        print(f"🔍 Vérification webhook: mode={mode}, token={token}")
         
         if mode == 'subscribe' and token == Config.FACEBOOK_VERIFY_TOKEN:
             print('✅ Webhook vérifié avec succès!')
@@ -69,28 +70,42 @@ def create_app():
         """Recevoir les notifications de Facebook"""
         data = request.get_json()
         
-        print(f"📨 Webhook reçu: {data}")
+        print("=" * 60)
+        print(f"📨 WEBHOOK REÇU")
+        print("=" * 60)
+        print(f"Data: {data}")
+        print("=" * 60)
         
         if not data or data.get('object') != 'page':
+            print("⚠️ Objet non-page, ignoré")
             return 'OK', 200
         
         for entry in data.get('entry', []):
             # Traiter les messages privés
             if 'messaging' in entry:
+                print("💬 Événement messaging détecté")
                 for messaging_event in entry['messaging']:
                     handle_message(messaging_event)
             
             # Traiter les commentaires
             if 'changes' in entry:
+                print("💭 Événement changes détecté")
                 for change in entry['changes']:
-                    if change.get('field') == 'feed':
-                        handle_comment(change.get('value', {}))
+                    field = change.get('field')
+                    print(f"   Field: {field}")
+                    
+                    if field == 'feed':
+                        value = change.get('value', {})
+                        print(f"   Value: {value}")
+                        handle_comment(value)
         
         return 'OK', 200
     
     @app.route('/privacy-policy', methods=['GET'])
     def privacy_policy():
         return render_template('privacy-policy.html')
+    
+    # ==================== HANDLERS ====================
     
     def handle_message(messaging_event):
         """Traiter un message reçu"""
@@ -115,8 +130,6 @@ def create_app():
                 print('❌ Aucune page active trouvée')
                 return
             
-            print(f"✅ Page active: {page.page_name}")
-            
             fb_service = FacebookService(page.access_token)
             
             # Obtenir les infos de l'utilisateur
@@ -126,7 +139,7 @@ def create_app():
             except:
                 sender_name = 'Utilisateur'
             
-            # 🆕 AMÉLIORÉ : Trouver une réponse appropriée avec NLP
+            # Trouver une réponse appropriée
             response_text = ResponseService.find_matching_response(message_text, 'message')
             if not response_text:
                 response_text = ResponseService.get_default_response()
@@ -162,79 +175,170 @@ def create_app():
             db.session.rollback()
     
     def handle_comment(comment_data):
-        """Traiter un commentaire reçu - VERSION CORRIGÉE"""
+        """
+        Traiter un commentaire reçu - VERSION FINALE ROBUSTE
+        """
         try:
-            # VÉRIFICATION : uniquement les NOUVEAUX commentaires
-            if comment_data.get('item') != 'comment':
-                print(f"❌ Item non-commentaire ignoré: {comment_data.get('item')}")
+            print("\n" + "=" * 60)
+            print("💭 TRAITEMENT COMMENTAIRE")
+            print("=" * 60)
+            print(f"Données brutes: {comment_data}")
+            print("=" * 60)
+            
+            # ÉTAPE 1: Vérifier le type d'item
+            item_type = comment_data.get('item')
+            print(f"1️⃣ Type d'item: {item_type}")
+            
+            if item_type not in ['comment', 'post', 'status']:
+                print(f"   ❌ Type '{item_type}' ignoré")
                 return
             
-            # VÉRIFICATION : uniquement les commentaires AJOUTÉS (pas édités/supprimés)
-            verb = comment_data.get('verb')
-            if verb not in ['add', 'edited']:
-                print(f"❌ Verbe ignoré: {verb}")
+            # ÉTAPE 2: Vérifier le verbe (action)
+            verb = comment_data.get('verb', 'add')
+            print(f"2️⃣ Verbe: {verb}")
+            
+            if verb == 'remove':
+                print("   ❌ Commentaire supprimé, ignoré")
                 return
             
+            # ÉTAPE 3: Extraire les données du commentaire
             comment_id = comment_data.get('comment_id')
             post_id = comment_data.get('post_id')
-            user_id = comment_data.get('from', {}).get('id')
-            user_name = comment_data.get('from', {}).get('name', 'Utilisateur')
+            
+            # Essayer plusieurs structures pour l'utilisateur
+            user_data = comment_data.get('from', {})
+            if not user_data:
+                user_data = comment_data.get('sender', {})
+            
+            user_id = user_data.get('id')
+            user_name = user_data.get('name', 'Utilisateur')
             comment_text = comment_data.get('message', '')
             
-            print(f"📝 Commentaire reçu de {user_name}: {comment_text[:50]}...")
+            print(f"3️⃣ Données extraites:")
+            print(f"   - Comment ID: {comment_id}")
+            print(f"   - Post ID: {post_id}")
+            print(f"   - User ID: {user_id}")
+            print(f"   - User Name: {user_name}")
+            print(f"   - Texte: {comment_text[:100]}...")
             
-            if not comment_text or not comment_id:
-                print("❌ Commentaire vide ou sans ID")
+            # ÉTAPE 4: Validations
+            if not comment_id:
+                print("   ❌ Pas de comment_id, abandon")
                 return
             
-            # Récupérer la page active
+            if not comment_text or comment_text.strip() == '':
+                print("   ❌ Commentaire vide, abandon")
+                return
+            
+            # ÉTAPE 5: Récupérer la page active
             page = FacebookPage.query.filter_by(is_active=True).first()
             if not page:
-                print('❌ Aucune page active trouvée')
+                print('   ❌ Aucune page active trouvée')
                 return
             
-            print(f"✅ Page active: {page.page_name}")
+            print(f"4️⃣ Page active: {page.page_name} (ID: {page.page_id})")
             
+            # ÉTAPE 6: Vérifier si c'est notre propre commentaire
+            try:
+                page_info_url = f"https://graph.facebook.com/v18.0/me"
+                page_info_response = requests.get(page_info_url, params={
+                    'access_token': page.access_token
+                })
+                
+                if page_info_response.status_code == 200:
+                    page_fb_id = page_info_response.json().get('id')
+                    
+                    if str(user_id) == str(page_fb_id):
+                        print(f"   ⚠️ C'est notre propre commentaire ({user_id}), ignoré")
+                        return
+            except Exception as e:
+                print(f"   ⚠️ Erreur vérification page ID: {e}")
+            
+            # ÉTAPE 7: Vérifier si déjà traité (éviter doublons)
+            existing = Comment.query.filter_by(comment_id=comment_id).first()
+            if existing:
+                print(f"   ⚠️ Commentaire {comment_id} déjà traité, ignoré")
+                return
+            
+            print(f"5️⃣ Commentaire valide, recherche de réponse...")
+            
+            # ÉTAPE 8: Chercher une réponse appropriée
             fb_service = FacebookService(page.access_token)
-            
-            # 🆕 AMÉLIORÉ : Trouver une réponse appropriée avec NLP
             response_text = ResponseService.find_matching_response(comment_text, 'comment')
             
-            if response_text:
-                print(f"💬 Réponse trouvée: {response_text[:50]}...")
+            if not response_text:
+                print("   ⚠️ Aucune réponse automatique trouvée")
                 
-                # Répondre au commentaire
-                result = fb_service.reply_to_comment(comment_id, response_text)
-                print(f"📤 Résultat: {result}")
-                
-                # Vérifier si erreur
-                if 'error' in result:
-                    print(f"❌ ERREUR API: {result['error']}")
-                    return
-                
-                # Enregistrer dans la base de données
+                # Enregistrer quand même sans réponse
                 new_comment = Comment(
                     comment_id=comment_id,
                     post_id=post_id,
                     user_id=user_id,
                     user_name=user_name,
                     comment_text=comment_text,
-                    response_sent=response_text,
-                    is_automated=True,
+                    response_sent=None,
+                    is_automated=False,
                     page_id=page.id
                 )
                 db.session.add(new_comment)
                 db.session.commit()
+                print("   ℹ️ Commentaire enregistré sans réponse")
+                return
+            
+            print(f"6️⃣ Réponse trouvée: {response_text[:50]}...")
+            
+            # ÉTAPE 9: Envoyer la réponse
+            print(f"7️⃣ Envoi de la réponse au commentaire {comment_id}...")
+            result = fb_service.reply_to_comment(comment_id, response_text)
+            
+            print(f"   Résultat API: {result}")
+            
+            # ÉTAPE 10: Vérifier le résultat
+            if 'error' in result:
+                error_msg = result['error'].get('message', 'Erreur inconnue')
+                error_code = result['error'].get('code', 'N/A')
+                error_type = result['error'].get('type', 'N/A')
                 
-                print(f'✅ Commentaire traité de {user_name}')
-            else:
-                print(f"⚠️ Aucune réponse trouvée pour: {comment_text[:30]}...")
+                print(f"   ❌ ERREUR API:")
+                print(f"      Code: {error_code}")
+                print(f"      Type: {error_type}")
+                print(f"      Message: {error_msg}")
+                
+                # Messages d'aide
+                if error_code == 200:
+                    print("      💡 Solution: Vérifiez la permission 'pages_manage_posts'")
+                elif error_code == 190:
+                    print("      💡 Solution: Token expiré, régénérez-le")
+                elif error_code == 100:
+                    print("      💡 Solution: Comment ID invalide")
+                
+                return
+            
+            print("   ✅ Réponse envoyée avec succès!")
+            
+            # ÉTAPE 11: Enregistrer dans la base de données
+            new_comment = Comment(
+                comment_id=comment_id,
+                post_id=post_id,
+                user_id=user_id,
+                user_name=user_name,
+                comment_text=comment_text,
+                response_sent=response_text,
+                is_automated=True,
+                page_id=page.id
+            )
+            db.session.add(new_comment)
+            db.session.commit()
+            
+            print(f"8️⃣ ✅ SUCCÈS COMPLET - Commentaire de {user_name} traité")
+            print("=" * 60 + "\n")
         
         except Exception as e:
-            print(f'❌ Erreur traitement commentaire: {str(e)}')
+            print(f'❌ ERREUR CRITIQUE traitement commentaire: {str(e)}')
             import traceback
             traceback.print_exc()
             db.session.rollback()
+            print("=" * 60 + "\n")
     
     # Route de santé
     @app.route('/health', methods=['GET'])
