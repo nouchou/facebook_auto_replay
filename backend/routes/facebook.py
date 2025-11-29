@@ -1,9 +1,10 @@
-from flask import request, jsonify, Blueprint
+from flask import request, jsonify
+from routes import facebook_bp  # ✅ IMPORTER depuis __init__.py
 from models import db, FacebookPage
 from services.facebook_service import FacebookService
 import requests
 
-facebook_bp = Blueprint('facebook', __name__)
+# ❌ NE PAS redéclarer: facebook_bp = Blueprint('facebook', __name__)
 
 @facebook_bp.route('/pages', methods=['GET'])
 def get_pages():

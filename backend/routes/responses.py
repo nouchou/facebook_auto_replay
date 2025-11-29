@@ -1,5 +1,8 @@
+"""
+Routes pour gérer les réponses automatiques
+"""
 from flask import request, jsonify
-from routes import responses_bp
+from routes import responses_bp  # ✅ Importer depuis __init__.py
 from models import db, AutoResponse, Message, Comment
 
 @responses_bp.route('', methods=['GET', 'OPTIONS'])

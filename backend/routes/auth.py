@@ -1,5 +1,8 @@
+"""
+Routes d'authentification
+"""
 from flask import request, jsonify
-from routes import auth_bp
+from routes import auth_bp  # ✅ Importer depuis __init__.py
 from models import db
 import jwt
 import datetime
