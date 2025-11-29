@@ -1,11 +1,11 @@
 """
-Routes API NLP - À ajouter dans routes/nlp.py
-Compatible avec votre structure existante
+Routes API NLP - MESSAGES UNIQUEMENT
+Compatible avec la structure messages only
 """
 
 from flask import Blueprint, request, jsonify
 from services.response_service import ResponseService
-from models import Message, Comment, db
+from models import Message, db
 
 nlp_bp = Blueprint('nlp', __name__)
 
@@ -39,11 +39,10 @@ def test_response():
     """
     Tester une réponse pour un message donné
     POST /api/nlp/test-response
-    Body: {"message": "Message de test", "type": "message"}
+    Body: {"message": "Message de test"}
     """
     data = request.get_json()
     message = data.get('message', '')
-    message_type = data.get('type', 'both')
     
     if not message:
         return jsonify({'error': 'Message requis'}), 400
@@ -53,7 +52,7 @@ def test_response():
         analysis = ResponseService.analyze_message_details(message)
         
         # Trouver la réponse
-        response_text = ResponseService.find_matching_response(message, message_type)
+        response_text = ResponseService.find_matching_response(message, 'message')
         
         if not response_text:
             response_text = ResponseService.get_default_response()
@@ -65,7 +64,7 @@ def test_response():
             'success': True,
             'input': {
                 'message': message,
-                'type': message_type
+                'type': 'message'
             },
             'analysis': analysis,
             'response': {
@@ -83,38 +82,22 @@ def test_response():
 @nlp_bp.route('/conversation-insights', methods=['GET'])
 def get_conversation_insights():
     """
-    Obtenir des insights sur les conversations récentes
-    GET /api/nlp/conversation-insights?limit=50&type=all
+    Obtenir des insights sur les conversations récentes - MESSAGES UNIQUEMENT
+    GET /api/nlp/conversation-insights?limit=50
     """
     limit = request.args.get('limit', 50, type=int)
-    conv_type = request.args.get('type', 'all')
     
     try:
-        messages_data = []
+        # Récupérer uniquement les messages
+        messages = Message.query.order_by(
+            Message.timestamp.desc()
+        ).limit(limit).all()
         
-        # Récupérer les messages
-        if conv_type in ['messages', 'all']:
-            messages = Message.query.order_by(
-                Message.timestamp.desc()
-            ).limit(limit).all()
-            
-            messages_data.extend([{
-                'message_text': m.message_text,
-                'type': 'message',
-                'timestamp': m.timestamp.isoformat()
-            } for m in messages if m.message_text])
-        
-        # Récupérer les commentaires
-        if conv_type in ['comments', 'all']:
-            comments = Comment.query.order_by(
-                Comment.timestamp.desc()
-            ).limit(limit).all()
-            
-            messages_data.extend([{
-                'message_text': c.comment_text,
-                'type': 'comment',
-                'timestamp': c.timestamp.isoformat()
-            } for c in comments if c.comment_text])
+        messages_data = [{
+            'message_text': m.message_text,
+            'type': 'message',
+            'timestamp': m.timestamp.isoformat()
+        } for m in messages if m.message_text]
         
         # Analyser les conversations
         insights = ResponseService.get_conversation_insights(messages_data)
@@ -122,7 +105,8 @@ def get_conversation_insights():
         return jsonify({
             'success': True,
             'insights': insights,
-            'analyzed_count': len(messages_data)
+            'analyzed_count': len(messages_data),
+            'feature': 'messages_only'
         }), 200
     
     except Exception as e:
@@ -134,7 +118,7 @@ def get_conversation_insights():
 @nlp_bp.route('/sentiment-stats', methods=['GET'])
 def get_sentiment_stats():
     """
-    Statistiques de sentiment sur les messages/commentaires
+    Statistiques de sentiment sur les messages - MESSAGES UNIQUEMENT
     GET /api/nlp/sentiment-stats?days=7
     """
     from datetime import datetime, timedelta
@@ -143,14 +127,9 @@ def get_sentiment_stats():
     start_date = datetime.utcnow() - timedelta(days=days)
     
     try:
-        # Messages récents
+        # Messages récents uniquement
         messages = Message.query.filter(
             Message.timestamp >= start_date
-        ).all()
-        
-        # Commentaires récents
-        comments = Comment.query.filter(
-            Comment.timestamp >= start_date
         ).all()
         
         # Analyser les sentiments
@@ -178,22 +157,6 @@ def get_sentiment_stats():
                 except:
                     continue
         
-        for comment in comments:
-            if comment.comment_text:
-                try:
-                    analysis = ResponseService.analyze_message_details(comment.comment_text)
-                    sentiment = analysis['sentiment']['sentiment']
-                    sentiment_counts[sentiment] += 1
-                    all_items.append({
-                        'type': 'comment',
-                        'text': comment.comment_text[:50] + '...' if len(comment.comment_text) > 50 else comment.comment_text,
-                        'sentiment': sentiment,
-                        'score': analysis['sentiment']['score'],
-                        'timestamp': comment.timestamp.isoformat()
-                    })
-                except:
-                    continue
-        
         total = sum(sentiment_counts.values())
         
         # Calculer les pourcentages
@@ -212,7 +175,8 @@ def get_sentiment_stats():
                 all_items,
                 key=lambda x: x['timestamp'],
                 reverse=True
-            )[:20]  # 20 plus récents
+            )[:20],
+            'feature': 'messages_only'
         }), 200
     
     except Exception as e:
@@ -224,7 +188,7 @@ def get_sentiment_stats():
 @nlp_bp.route('/intents-stats', methods=['GET'])
 def get_intents_stats():
     """
-    Statistiques sur les intentions détectées
+    Statistiques sur les intentions détectées - MESSAGES UNIQUEMENT
     GET /api/nlp/intents-stats?days=7
     """
     from datetime import datetime, timedelta
@@ -234,13 +198,9 @@ def get_intents_stats():
     start_date = datetime.utcnow() - timedelta(days=days)
     
     try:
-        # Récupérer les messages et commentaires récents
+        # Récupérer les messages récents
         messages = Message.query.filter(
             Message.timestamp >= start_date
-        ).all()
-        
-        comments = Comment.query.filter(
-            Comment.timestamp >= start_date
         ).all()
         
         # Analyser les intentions
@@ -250,14 +210,6 @@ def get_intents_stats():
             if msg.message_text:
                 try:
                     analysis = ResponseService.analyze_message_details(msg.message_text)
-                    intents.append(analysis['intent'])
-                except:
-                    continue
-        
-        for comment in comments:
-            if comment.comment_text:
-                try:
-                    analysis = ResponseService.analyze_message_details(comment.comment_text)
                     intents.append(analysis['intent'])
                 except:
                     continue
@@ -280,7 +232,8 @@ def get_intents_stats():
             'period': f'{days} jours',
             'total_analyzed': len(intents),
             'intent_stats': intent_stats,
-            'top_3_intents': [item['intent'] for item in intent_stats[:3]]
+            'top_3_intents': [item['intent'] for item in intent_stats[:3]],
+            'feature': 'messages_only'
         }), 200
     
     except Exception as e:
@@ -292,7 +245,7 @@ def get_intents_stats():
 @nlp_bp.route('/response-quality', methods=['GET'])
 def get_response_quality():
     """
-    Évaluer la qualité des réponses automatiques
+    Évaluer la qualité des réponses automatiques - MESSAGES UNIQUEMENT
     GET /api/nlp/response-quality?days=7
     """
     from datetime import datetime, timedelta
@@ -307,13 +260,7 @@ def get_response_quality():
             Message.is_automated == True
         ).all()
         
-        # Commentaires automatiques
-        auto_comments = Comment.query.filter(
-            Comment.timestamp >= start_date,
-            Comment.is_automated == True
-        ).all()
-        
-        total_auto = len(auto_messages) + len(auto_comments)
+        total_auto = len(auto_messages)
         
         # Analyser la satisfaction (basée sur les réponses reçues)
         positive_responses = 0
@@ -342,7 +289,8 @@ def get_response_quality():
             'positive_responses': positive_responses,
             'negative_responses': negative_responses,
             'satisfaction_rate': satisfaction_rate,
-            'quality_score': satisfaction_rate / 100
+            'quality_score': satisfaction_rate / 100,
+            'feature': 'messages_only'
         }), 200
     
     except Exception as e:
