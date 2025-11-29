@@ -1,9 +1,9 @@
 """
-Routes pour gérer les réponses automatiques
+Routes pour gérer les réponses automatiques - MESSAGES UNIQUEMENT
 """
 from flask import request, jsonify
-from routes import responses_bp  # ✅ Importer depuis __init__.py
-from models import db, AutoResponse, Message, Comment
+from routes import responses_bp
+from models import db, AutoResponse, Message
 
 @responses_bp.route('', methods=['GET', 'OPTIONS'])
 @responses_bp.route('/', methods=['GET', 'OPTIONS'])
@@ -32,7 +32,7 @@ def create_response():
     new_response = AutoResponse(
         trigger_keyword=data['trigger_keyword'],
         response_text=data['response_text'],
-        response_type=data.get('response_type', 'both'),
+        response_type='message',  # Toujours 'message' maintenant
         priority=data.get('priority', 0),
         is_active=data.get('is_active', True)
     )
@@ -53,7 +53,7 @@ def update_response(response_id):
     
     response.trigger_keyword = data.get('trigger_keyword', response.trigger_keyword)
     response.response_text = data.get('response_text', response.response_text)
-    response.response_type = data.get('response_type', response.response_type)
+    response.response_type = 'message'  # Toujours 'message'
     response.is_active = data.get('is_active', response.is_active)
     response.priority = data.get('priority', response.priority)
     
@@ -86,39 +86,18 @@ def get_messages():
         'timestamp': m.timestamp.isoformat()
     } for m in messages])
 
-@responses_bp.route('/comments', methods=['GET'])
-def get_comments():
-    """Récupérer l'historique des commentaires"""
-    limit = request.args.get('limit', 100, type=int)
-    comments = Comment.query.order_by(Comment.timestamp.desc()).limit(limit).all()
-    
-    return jsonify([{
-        'id': c.id,
-        'comment_id': c.comment_id,
-        'post_id': c.post_id,
-        'user_id': c.user_id,
-        'user_name': c.user_name,
-        'comment_text': c.comment_text,
-        'response_sent': c.response_sent,
-        'is_automated': c.is_automated,
-        'timestamp': c.timestamp.isoformat()
-    } for c in comments])
-
 @responses_bp.route('/stats', methods=['GET'])
 def get_stats():
-    """Obtenir les statistiques"""
+    """Obtenir les statistiques - MESSAGES UNIQUEMENT"""
     total_responses = AutoResponse.query.count()
     active_responses = AutoResponse.query.filter_by(is_active=True).count()
     total_messages = Message.query.count()
-    total_comments = Comment.query.count()
     automated_messages = Message.query.filter_by(is_automated=True).count()
-    automated_comments = Comment.query.filter_by(is_automated=True).count()
     
     return jsonify({
         'total_responses': total_responses,
         'active_responses': active_responses,
         'total_messages': total_messages,
-        'total_comments': total_comments,
         'automated_messages': automated_messages,
-        'automated_comments': automated_comments
+        'feature': 'messages_only'
     })
