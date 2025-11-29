@@ -144,28 +144,29 @@ def subscribe_webhooks(page_id):
         
         url = f'https://graph.facebook.com/v18.0/{page.page_id}/subscribed_apps'
         
-        # TOUS les champs nécessaires
+        # ✅ CHAMPS VALIDES selon l'erreur Facebook
+        # Note: 'feed' inclut les commentaires, posts, etc.
         subscribed_fields = [
             'messages',              # Messages Messenger
             'messaging_postbacks',   # Boutons Messenger
             'message_deliveries',    # Livraison messages
             'message_reads',         # Messages lus
-            'feed',                  # 🔥 Posts et commentaires (CRITIQUE!)
-            'comments',              # 🔥 Commentaires (CRITIQUE!)
+            'feed',                  # 🔥 Posts ET commentaires (CRITIQUE!)
             'mention',               # Mentions de la page
             'messaging_referrals',   # Références
             'message_echoes'         # Échos des messages
         ]
         
         payload = {
-            'subscribed_fields': subscribed_fields,
+            'subscribed_fields': ','.join(subscribed_fields),  # ✅ Jointure avec virgule
             'access_token': page.access_token
         }
         
         print(f"\nChamps d'abonnement: {subscribed_fields}")
         print(f"\nEnvoi requête POST vers: {url}")
+        print(f"Payload: {payload}")
         
-        response = requests.post(url, json=payload)
+        response = requests.post(url, data=payload)  # ✅ Utiliser 'data' au lieu de 'json'
         result = response.json()
         
         print(f"\nStatut: {response.status_code}")
