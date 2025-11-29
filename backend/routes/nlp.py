@@ -5,7 +5,7 @@ Compatible avec votre structure existante
 
 from flask import Blueprint, request, jsonify
 from services.response_service import ResponseService
-from models import Message, db
+from models import Message, Comment, db
 
 nlp_bp = Blueprint('nlp', __name__)
 
