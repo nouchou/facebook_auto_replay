@@ -1,10 +1,8 @@
 from flask import request, jsonify
-from routes import facebook_bp  # ✅ IMPORTER depuis __init__.py
+from routes import facebook_bp
 from models import db, FacebookPage
 from services.facebook_service import FacebookService
 import requests
-
-# ❌ NE PAS redéclarer: facebook_bp = Blueprint('facebook', __name__)
 
 @facebook_bp.route('/pages', methods=['GET'])
 def get_pages():
@@ -144,8 +142,7 @@ def subscribe_webhooks(page_id):
         
         url = f'https://graph.facebook.com/v18.0/{page.page_id}/subscribed_apps'
         
-        # ✅ CHAMPS VALIDES selon l'erreur Facebook
-        # Note: 'feed' inclut les commentaires, posts, etc.
+        # ✅ CHAMPS VALIDES - SANS message_echoes pour éviter doublons
         subscribed_fields = [
             'messages',              # Messages Messenger
             'messaging_postbacks',   # Boutons Messenger
@@ -153,12 +150,12 @@ def subscribe_webhooks(page_id):
             'message_reads',         # Messages lus
             'feed',                  # 🔥 Posts ET commentaires (CRITIQUE!)
             'mention',               # Mentions de la page
-            'messaging_referrals',   # Références
-            'message_echoes'         # Échos des messages
+            'messaging_referrals'    # Références
+            # ❌ 'message_echoes' retiré pour éviter les doublons
         ]
         
         payload = {
-            'subscribed_fields': ','.join(subscribed_fields),  # ✅ Jointure avec virgule
+            'subscribed_fields': ','.join(subscribed_fields),
             'access_token': page.access_token
         }
         
@@ -166,7 +163,7 @@ def subscribe_webhooks(page_id):
         print(f"\nEnvoi requête POST vers: {url}")
         print(f"Payload: {payload}")
         
-        response = requests.post(url, data=payload)  # ✅ Utiliser 'data' au lieu de 'json'
+        response = requests.post(url, data=payload)
         result = response.json()
         
         print(f"\nStatut: {response.status_code}")

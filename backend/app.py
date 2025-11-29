@@ -56,7 +56,7 @@ def create_app():
         token = request.args.get('hub.verify_token')
         challenge = request.args.get('hub.challenge')
         
-        print(f"🔍 Vérification webhook: mode={mode}, token={token}")
+        print(f"🔐 Vérification webhook: mode={mode}, token={token}")
         
         if mode == 'subscribe' and token == Config.FACEBOOK_VERIFY_TOKEN:
             print('✅ Webhook vérifié avec succès!')
@@ -108,52 +108,71 @@ def create_app():
     # ==================== HANDLERS ====================
     
     def handle_message(messaging_event):
-        """Traiter un message reçu"""
+        """Traiter un message reçu - VERSION SANS DOUBLONS"""
         try:
-            # Éviter les échos
-            if 'is_echo' in messaging_event.get('message', {}):
+            # ✅ ÉTAPE 1: Éviter les échos (messages envoyés par le bot lui-même)
+            message = messaging_event.get('message', {})
+            
+            if 'is_echo' in message or message.get('is_echo'):
+                print("   ⏭️ Écho détecté, ignoré")
                 return
             
+            # ✅ ÉTAPE 2: Extraire les informations
             sender_id = messaging_event.get('sender', {}).get('id')
-            message = messaging_event.get('message', {})
             message_text = message.get('text', '')
             message_id = message.get('mid')
             
-            if not message_text or not sender_id:
+            if not message_text or not sender_id or not message_id:
+                print("   ℹ️ Message incomplet, ignoré")
                 return
             
             print(f"📩 Message reçu de {sender_id}: {message_text[:50]}...")
             
-            # Récupérer la page active
+            # ✅ ÉTAPE 3: VÉRIFIER SI DÉJÀ TRAITÉ (éviter doublons)
+            existing_message = Message.query.filter_by(message_id=message_id).first()
+            if existing_message:
+                print(f"   ⚠️ Message {message_id} déjà traité, ignoré")
+                return
+            
+            # ✅ ÉTAPE 4: Récupérer la page active
             page = FacebookPage.query.filter_by(is_active=True).first()
             if not page:
-                print('❌ Aucune page active trouvée')
+                print('   ❌ Aucune page active trouvée')
                 return
             
             fb_service = FacebookService(page.access_token)
             
-            # Obtenir les infos de l'utilisateur
+            # ✅ ÉTAPE 5: Vérifier que ce n'est pas notre propre page qui envoie
+            try:
+                page_info_url = f"https://graph.facebook.com/v18.0/me"
+                page_info_response = requests.get(page_info_url, params={
+                    'access_token': page.access_token
+                }, timeout=5)
+                
+                if page_info_response.status_code == 200:
+                    page_fb_id = page_info_response.json().get('id')
+                    
+                    if sender_id and str(sender_id) == str(page_fb_id):
+                        print(f"   ⚠️ C'est notre propre page ({sender_id}), ignoré")
+                        return
+            except Exception as e:
+                print(f"   ℹ️ Impossible de vérifier page ID: {e}")
+            
+            # ✅ ÉTAPE 6: Obtenir les infos de l'utilisateur
             try:
                 user_info = fb_service.get_user_info(sender_id)
                 sender_name = user_info.get('name', 'Utilisateur')
             except:
                 sender_name = 'Utilisateur'
             
-            # Trouver une réponse appropriée
+            # ✅ ÉTAPE 7: Trouver une réponse appropriée
             response_text = ResponseService.find_matching_response(message_text, 'message')
             if not response_text:
                 response_text = ResponseService.get_default_response()
             
             print(f"💬 Réponse: {response_text[:50]}...")
             
-            # Envoyer la réponse
-            result = fb_service.send_message(sender_id, response_text)
-            
-            if 'error' in result:
-                print(f"❌ Erreur envoi: {result['error']}")
-                return
-            
-            # Enregistrer dans la base de données
+            # ✅ ÉTAPE 8: ENREGISTRER D'ABORD (avant envoi)
             new_message = Message(
                 message_id=message_id,
                 sender_id=sender_id,
@@ -166,7 +185,20 @@ def create_app():
             db.session.add(new_message)
             db.session.commit()
             
-            print(f'✅ Message traité de {sender_name}')
+            print(f"   ✅ Message enregistré en base")
+            
+            # ✅ ÉTAPE 9: Envoyer la réponse (après enregistrement)
+            result = fb_service.send_message(sender_id, response_text)
+            
+            if 'error' in result:
+                print(f"❌ Erreur envoi: {result['error']}")
+                # Mettre à jour le message avec l'erreur
+                new_message.is_automated = False
+                new_message.response_sent = f"ERREUR: {result['error'].get('message', 'Erreur inconnue')}"
+                db.session.commit()
+                return
+            
+            print(f'✅ Message traité et envoyé à {sender_name}')
         
         except Exception as e:
             print(f'❌ Erreur traitement message: {str(e)}')
@@ -175,9 +207,7 @@ def create_app():
             db.session.rollback()
     
     def handle_comment(comment_data):
-        """
-        Traiter un commentaire reçu - VERSION CORRIGÉE ET ROBUSTE
-        """
+        """Traiter un commentaire reçu - VERSION CORRIGÉE ET ROBUSTE"""
         try:
             print("\n" + "=" * 60)
             print("💭 TRAITEMENT COMMENTAIRE")
@@ -304,43 +334,7 @@ def create_app():
             
             print(f"6️⃣ Réponse trouvée: {response_text[:50]}...")
             
-            # ÉTAPE 9: Envoyer la réponse
-            print(f"7️⃣ Envoi de la réponse au commentaire {comment_id}...")
-            result = fb_service.reply_to_comment(str(comment_id), response_text)
-            
-            print(f"   Résultat API: {result}")
-            
-            # ÉTAPE 10: Vérifier le résultat
-            if 'error' in result:
-                error = result['error']
-                error_msg = error.get('message', 'Erreur inconnue')
-                error_code = error.get('code', 'N/A')
-                error_type = error.get('type', 'N/A')
-                
-                print(f"   ❌ ERREUR API:")
-                print(f"      Code: {error_code}")
-                print(f"      Type: {error_type}")
-                print(f"      Message: {error_msg}")
-                
-                # Enregistrer avec erreur
-                new_comment = Comment(
-                    comment_id=str(comment_id),
-                    post_id=str(post_id) if post_id else None,
-                    user_id=str(user_id) if user_id else None,
-                    user_name=user_name,
-                    comment_text=comment_text,
-                    response_sent=f"ERREUR: {error_msg}",
-                    is_automated=False,
-                    page_id=page.id
-                )
-                db.session.add(new_comment)
-                db.session.commit()
-                
-                return
-            
-            print("   ✅ Réponse envoyée avec succès!")
-            
-            # ÉTAPE 11: Enregistrer dans la base de données
+            # ÉTAPE 9: Enregistrer D'ABORD en base (avant envoi)
             new_comment = Comment(
                 comment_id=str(comment_id),
                 post_id=str(post_id) if post_id else None,
@@ -353,7 +347,34 @@ def create_app():
             )
             db.session.add(new_comment)
             db.session.commit()
+            print("   ✅ Commentaire enregistré en base")
             
+            # ÉTAPE 10: Envoyer la réponse (après enregistrement)
+            print(f"7️⃣ Envoi de la réponse au commentaire {comment_id}...")
+            result = fb_service.reply_to_comment(str(comment_id), response_text)
+            
+            print(f"   Résultat API: {result}")
+            
+            # ÉTAPE 11: Vérifier le résultat
+            if 'error' in result:
+                error = result['error']
+                error_msg = error.get('message', 'Erreur inconnue')
+                error_code = error.get('code', 'N/A')
+                error_type = error.get('type', 'N/A')
+                
+                print(f"   ❌ ERREUR API:")
+                print(f"      Code: {error_code}")
+                print(f"      Type: {error_type}")
+                print(f"      Message: {error_msg}")
+                
+                # Mettre à jour avec erreur
+                new_comment.response_sent = f"ERREUR: {error_msg}"
+                new_comment.is_automated = False
+                db.session.commit()
+                
+                return
+            
+            print("   ✅ Réponse envoyée avec succès!")
             print(f"8️⃣ ✅ SUCCÈS COMPLET - Commentaire de {user_name} traité")
             print("=" * 60 + "\n")
         
@@ -377,7 +398,7 @@ if __name__ == '__main__':
     print('='*60)
     print('🚀 Démarrage de l\'application Facebook Auto-Reply')
     print('='*60)
-    print(f'🔌 Port: {port}')
+    print(f'📌 Port: {port}')
     print(f'🔧 Mode: {Config.DEBUG and "Development" or "Production"}')
     print(f'💾 Database: {Config.SQLALCHEMY_DATABASE_URI.split("://")[0]}')
     print('='*60)
